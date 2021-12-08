@@ -1,8 +1,9 @@
 package goconfig
 
 import (
+	"errors"
+	"fmt"
 	"github.com/spf13/viper"
-	"log"
 )
 
 const (
@@ -35,52 +36,54 @@ type Option struct {
 
 func NewGoConfig(option Option) *GoConfig {
 	return &GoConfig{
-		isRead:            false,
 		prefix:            option.Prefix,
 		env:               DEV,
 		config:            option.Config,
 		defaultConfig:     option.DefaultConfig,
 		defaultConfigPath: option.DefaultConfigPath,
+		configFiles:       option.ConfigFiles,
 	}
 }
 
-func (c *GoConfig) GetConfig() interface{} {
-	if !c.isRead {
-		c.readConfig()
-	}
-
-	return c.config
+func (c *GoConfig) ReadConfig() error {
+	return c.readConfig()
 }
 
 func (c *GoConfig) GetEnv() string {
 	return c.env
 }
 
-func (c *GoConfig) readConfig() {
+func (c *GoConfig) readConfig() error {
 	c.defineEnv()
-	c.readDefault()
-	c.readTargetConfig()
-	c.isRead = true
+
+	err := c.readDefault()
+
+	if err != nil {
+		return err
+	}
+
+	err = c.readTargetConfig()
+
+	return err
 }
 
-func (c *GoConfig) readDefault() {
+func (c *GoConfig) readDefault() error {
 	viper.AddConfigPath(c.defaultConfigPath)
 	viper.SetConfigName(c.defaultConfig)
 
-	c.read()
-	c.unmarshal()
+	return c.unmarshal()
 }
 
-func (c *GoConfig) readTargetConfig() {
+func (c *GoConfig) readTargetConfig() error {
 	configName, ok := c.configFiles[c.env]
 
-	if ok {
-		viper.SetConfigName(configName)
-		c.read()
-		c.unmarshal()
-	} else {
-		log.Fatal("Cannot read target config", configName)
+	if !ok {
+		return errors.New(fmt.Sprintf("The target configuration with name %s cannot be read", configName))
 	}
+
+	viper.SetConfigName(configName)
+
+	return c.unmarshal()
 }
 
 func (c *GoConfig) defineEnv() {
@@ -99,18 +102,17 @@ func (c *GoConfig) defineEnv() {
 	}
 }
 
-func (c *GoConfig) unmarshal() {
-	err := viper.Unmarshal(c.config)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func (c *GoConfig) read() {
+func (c *GoConfig) unmarshal() error {
 	err := viper.ReadInConfig()
 
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	err = viper.Unmarshal(c.config)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
